@@ -6,7 +6,9 @@ export const CONFIG = {
   DAILY_TARGET: 12,
   MONTHLY_TARGET_SESSIONS: 310,
   SESSION_DURATION_MINS: 50,
-  STORAGE_KEY: 'mission_tracker_pro_data',
+  POMODORO_WORK: 50,
+  POMODORO_BREAK: 10,
+  STORAGE_KEY: 'mission_tracker_pro_data_v8',
   TIMEZONE: 'Asia/Dhaka',
   POPULATION_SIZE: 2000000,
 };
@@ -29,10 +31,6 @@ export interface EnhancedRankInfo {
   sessionThreshold: string;
 }
 
-/**
- * Position-Based Ranking System
- * Calibrated for 2M candidates in Bangladesh based on provided study hour distribution
- */
 export const RANK_TIERS: EnhancedRankInfo[] = [
   { tier: 'GRANDMASTER', label: 'Grandmaster', color: '#facc15', minRank: 1, maxRank: 100, division: 1, percentile: 'Top 100 Elite', sessionThreshold: '12+ Hours/Day' },
   { tier: 'MASTER', label: 'Master', color: '#d946ef', minRank: 101, maxRank: 19000, division: 3, percentile: 'Top 0.95%', sessionThreshold: '8-12 Hours/Day' },

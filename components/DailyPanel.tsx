@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { DayData, StudySession } from '../types';
 import { CONFIG } from '../constants';
 import { sounds } from '../services/audioService';
@@ -11,25 +11,52 @@ interface DailyPanelProps {
 }
 
 const DailyPanel: React.FC<DailyPanelProps> = ({ dateKey, data, onUpdate }) => {
-  const [sessions, setSessions] = React.useState<StudySession[]>(data.sessions);
+  const [sessions, setSessions] = useState<StudySession[]>(data.sessions);
+  const [timer, setTimer] = useState(CONFIG.POMODORO_WORK * 60);
+  const [isActive, setIsActive] = useState(false);
 
-  // Sync state with props
-  React.useEffect(() => {
-    setSessions(data.sessions);
+  useEffect(() => {
+    if (data.sessions) {
+      setSessions(data.sessions);
+    }
   }, [data.sessions]);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (isActive && timer > 0) {
+      interval = setInterval(() => {
+        setTimer((t) => t - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      setIsActive(false);
+      sounds.success();
+      alert("Mission Accomplished! Log your session now.");
+      setTimer(CONFIG.POMODORO_WORK * 60);
+    }
+    return () => clearInterval(interval);
+  }, [isActive, timer]);
+
+  const toggleTimer = () => {
+    sounds.toggle();
+    setIsActive(!isActive);
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const calculateEfficiency = (currentSessions: StudySession[]) => {
     const ratings = currentSessions
       .map(s => s.rating)
-      .filter((r): r is number => r !== null);
+      .filter((r): r is number => typeof r === 'number' && r !== null);
     if (ratings.length === 0) return 0;
     const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
     return Math.round((avg / 10) * 100);
   };
 
   const handleSessionChange = (index: number, field: keyof StudySession, value: any) => {
-    if (field === 'rating') sounds.click();
-    
     const updated = [...sessions];
     updated[index] = { ...updated[index], [field]: value };
     setSessions(updated);
@@ -51,33 +78,36 @@ const DailyPanel: React.FC<DailyPanelProps> = ({ dateKey, data, onUpdate }) => {
     onUpdate({ ...data, sessions: updated });
   };
 
-  const removeSession = (index: number) => {
-    sounds.delete();
-    if (index < CONFIG.FIXED_SESSIONS) return;
-    const updated = sessions.filter((_, i) => i !== index);
-    setSessions(updated);
-    const eff = calculateEfficiency(updated);
-    onUpdate({ ...data, sessions: updated, efficiency: eff });
-  };
-
-  const formattedDate = new Date(dateKey).toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric'
-  });
+  const timerStatusColor = isActive ? 'bg-red-500 animate-pulse' : 'bg-slate-700';
 
   return (
     <div className="bg-[#111318] rounded-2xl border border-white/5 shadow-2xl flex flex-col h-[calc(100vh-8rem)]">
-      <div className="p-6 border-b border-white/5 shrink-0">
-        <h3 className="text-xl font-bold text-white mb-1">Daily Log</h3>
-        <p className="text-slate-500 text-sm font-medium">{formattedDate}</p>
+      {/* Timer Section */}
+      <div className="p-6 bg-gradient-to-b from-blue-600/10 to-transparent border-b border-white/5 shrink-0">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xs font-black text-blue-400 uppercase tracking-[0.2em]">Mission Timer</h3>
+          <div className={`w-2 h-2 rounded-full ${timerStatusColor}`} />
+        </div>
         
-        <div className="mt-4 flex items-center justify-between">
-          <div className="px-3 py-1 bg-blue-500/10 text-blue-400 rounded-lg text-sm font-bold border border-blue-500/20">
-            Efficiency: {data.efficiency}%
+        <div className="flex flex-col items-center">
+          <div className="text-5xl font-black font-mono text-white mb-4 tracking-tighter">
+            {formatTime(timer)}
           </div>
-          <div className="text-xs text-slate-500 font-mono">
-            {sessions.filter(s => s.rating !== null).length} Sessions logged
+          <div className="flex gap-2 w-full">
+            <button 
+              onClick={toggleTimer}
+              className={`flex-1 py-2 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${
+                isActive ? 'bg-slate-800 text-slate-400' : 'bg-blue-600 text-white shadow-lg shadow-blue-900/40'
+              }`}
+            >
+              {isActive ? 'Abort' : 'Commence'}
+            </button>
+            <button 
+              onClick={() => { sounds.toggle(); setTimer(CONFIG.POMODORO_WORK * 60); setIsActive(false); }}
+              className="px-4 py-2 bg-slate-800 text-slate-400 rounded-xl font-black text-xs uppercase"
+            >
+              Reset
+            </button>
           </div>
         </div>
       </div>
@@ -94,7 +124,7 @@ const DailyPanel: React.FC<DailyPanelProps> = ({ dateKey, data, onUpdate }) => {
                 type="text"
                 value={session.subject}
                 onChange={(e) => handleSessionChange(index, 'subject', e.target.value)}
-                placeholder="Subject/Topic"
+                placeholder="Target Subject"
                 className="w-full bg-transparent text-white placeholder-slate-600 text-sm font-medium focus:outline-none"
               />
               <div className="flex items-center gap-2">
@@ -104,24 +134,15 @@ const DailyPanel: React.FC<DailyPanelProps> = ({ dateKey, data, onUpdate }) => {
                   max="10"
                   value={session.rating === null ? '' : session.rating}
                   onChange={(e) => {
-                    const val = e.target.value === '' ? null : Math.max(0, Math.min(10, parseInt(e.target.value)));
+                    const rawValue = e.target.value;
+                    const val = rawValue === '' ? null : Math.max(0, Math.min(10, parseInt(rawValue)));
                     handleSessionChange(index, 'rating', val);
                   }}
                   className="w-16 h-8 bg-[#0b0c0e] border border-white/10 rounded-lg text-center text-sm font-bold focus:border-blue-500 transition-colors"
-                  placeholder="0-10"
                 />
-                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Quality</span>
+                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Quality Score</span>
               </div>
             </div>
-
-            {index >= CONFIG.FIXED_SESSIONS && (
-              <button 
-                onClick={() => removeSession(index)}
-                className="p-1.5 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-              </button>
-            )}
           </div>
         ))}
         
@@ -129,16 +150,14 @@ const DailyPanel: React.FC<DailyPanelProps> = ({ dateKey, data, onUpdate }) => {
           onClick={addSession}
           className="w-full py-3 border-2 border-dashed border-white/10 rounded-xl text-slate-500 text-sm font-bold hover:border-blue-500/50 hover:text-blue-400 transition-all flex items-center justify-center gap-2"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-          Extra Session
+          Add Session
         </button>
       </div>
 
-      <div className="p-6 border-t border-white/5 bg-white/2 shrink-0 rounded-b-2xl">
-        <p className="text-[10px] text-slate-600 leading-relaxed font-medium">
-          Note: Mandatory 8 sessions. Ratings directly impact your efficiency. 
-          Target is 12. Aim for quality >= 8 for "Pure" study hours.
-        </p>
+      <div className="p-4 bg-black/40 border-t border-white/5 text-center shrink-0">
+         <p className="text-[9px] text-slate-600 font-black uppercase tracking-widest">
+           Efficiency Target: 80 Percent
+         </p>
       </div>
     </div>
   );

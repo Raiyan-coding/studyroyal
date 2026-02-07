@@ -1,5 +1,7 @@
 {
   "name": "Mission Tracker Pro",
   "description": "A high-performance study tracking and quality analysis application with automated efficiency scoring and interactive progress visualization.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }
